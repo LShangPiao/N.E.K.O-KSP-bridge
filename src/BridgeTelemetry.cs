@@ -49,8 +49,11 @@ namespace NekoKspBridge
                 string r = BuildResources();
                 string c = BuildCrew();
                 string t = BuildTarget();
-                string vs = BuildVessels();
-                string bs = BuildBodies();
+                // /vessels 与 /bodies 是慢变量：飞船列表和天体表基本不变，重建代价却不低
+                // （天体要反射读一堆参数）。每 4 次采集刷新一次，场景切换时立刻刷新。
+                bool slow = SlowDue(scene);
+                string vs = slow ? BuildVessels() : null;
+                string bs = slow ? BuildBodies() : null;
 
                 StringBuilder sb = new StringBuilder(4096);
                 sb.Append("{\"ok\":true");
@@ -70,8 +73,14 @@ namespace NekoKspBridge
                     resourcesJson = r;
                     crewJson = c;
                     targetJson = t;
-                    vesselsJson = vs;
-                    bodiesJson = bs;
+                    if (vs != null)
+                    {
+                        vesselsJson = vs;
+                    }
+                    if (bs != null)
+                    {
+                        bodiesJson = bs;
+                    }
                     stateJson = sb.ToString();
                 }
             }
@@ -84,6 +93,25 @@ namespace NekoKspBridge
                     vesselJson = err;
                 }
             }
+        }
+
+        private static int slowCount;
+        private static string slowScene = "";
+
+        /// <summary>
+        /// 慢变量（飞船列表 / 天体表）每 4 次采集刷新一次，场景切换时立刻刷新。
+        /// 这样 /vessels 与 /bodies 的反射开销不再压在每一帧上。
+        /// </summary>
+        private static bool SlowDue(string scene)
+        {
+            slowCount++;
+            if (slowCount >= 4 || scene != slowScene)
+            {
+                slowCount = 0;
+                slowScene = scene;
+                return true;
+            }
+            return false;
         }
 
         private static string SceneName()
@@ -163,6 +191,16 @@ namespace NekoKspBridge
             sb.Append(",\"landed_at\":\"").Append(BridgeJson.Esc(v.landedAt)).Append("\"");
             sb.Append(",\"mission_time\":").Append(BridgeJson.Num(v.missionTime));
             sb.Append(",\"mass\":").Append(BridgeJson.Num(v.GetTotalMass()));
+
+            // 油门：0..1。玩家最常问「油门多少」，没有这个字段就只能靠模型猜。
+            // KSP 里 Vessel 本身没有 mainThrottle，控制状态挂在 ctrlState 上。
+            try
+            {
+                sb.Append(",\"throttle\":").Append(BridgeJson.Num(v.ctrlState.mainThrottle));
+            }
+            catch
+            {
+            }
 
             try
             {

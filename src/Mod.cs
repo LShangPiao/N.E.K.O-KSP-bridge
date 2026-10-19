@@ -22,7 +22,7 @@ namespace NekoKspBridge
     public class KspBridgeAddon : UnityEngine.MonoBehaviour
     {
         public const string ModName = "N.E.K.O-KSP-bridge";
-        public const string Version = "0.1.0";
+        public const string Version = "0.1.1";
 
         private static KspBridgeAddon instance;
         private float nextCapture;
